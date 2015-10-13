@@ -1,14 +1,14 @@
 package main
 
 import (
+	"encoding/csv"
 	"flag"
 	"fmt"
-	"os"
-	"strings"
-	"encoding/csv"
-	"regexp"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
+	"os"
+	"regexp"
+	"strings"
 )
 
 func main() {
@@ -25,7 +25,7 @@ func main() {
 
 	//var tableRegex = regexp.MustCompile(`{{(?P<tableName>\s*[\w\.]+\s*)}}`)
 	var tableRegex = regexp.MustCompile(`{{(?P<tableName>.*)}}`)
-	
+
 	matches := tableRegex.FindAllStringSubmatch(*query, -1)
 
 	// This will store the set of files
@@ -38,12 +38,12 @@ func main() {
 
 		// Check that this file exists
 		if _, err := os.Stat(filePath); err != nil {
-		    fmt.Printf("%s \n", err)
-		    os.Exit(-1)
+			fmt.Printf("%s \n", err)
+			os.Exit(-1)
 		}
 
-		modifiedQuery = strings.Replace(modifiedQuery, match[0], "\"" + filePath + "\"", -1)
-		fileSet[filePath] = struct {}{}
+		modifiedQuery = strings.Replace(modifiedQuery, match[0], "\""+filePath+"\"", -1)
+		fileSet[filePath] = struct{}{}
 
 		fmt.Printf("%s\n", modifiedQuery)
 	}
@@ -55,21 +55,20 @@ func main() {
 
 		// Check that this file exists
 		if _, err := os.Stat(filePath); err != nil {
-		    fmt.Printf("%s \n", err)
-		    os.Exit(-1)
+			fmt.Printf("%s \n", err)
+			os.Exit(-1)
 		}
 
-		fileSet[filePath] = struct {}{}
+		fileSet[filePath] = struct{}{}
 	}
 
-	for filePath := range(fileSet) {
+	for filePath := range fileSet {
 		createTableFromFile(db, filePath)
 	}
 
 	rows, err := db.Queryx(modifiedQuery)
 	checkErr(err)
 	defer rows.Close()
-
 
 	results := map[string]interface{}{}
 	for rows.Next() {
