@@ -23,8 +23,8 @@ func main() {
 
 	defer db.Close()
 
-	//var tableRegex = regexp.MustCompile(`{{(?P<tableName>\s*[\w\.]+\s*)}}`)
-	var tableRegex = regexp.MustCompile(`{{(?P<tableName>.*)}}`)
+	var tableRegex = regexp.MustCompile(`{{(?P<tableName>\s*[\w\.]+\s*)}}`)
+	//var tableRegex = regexp.MustCompile(`{{(?P<tableName>.*)}}`)
 
 	matches := tableRegex.FindAllStringSubmatch(*query, -1)
 
@@ -45,7 +45,7 @@ func main() {
 		modifiedQuery = strings.Replace(modifiedQuery, match[0], "\""+filePath+"\"", -1)
 		fileSet[filePath] = struct{}{}
 
-		fmt.Printf("%s\n", modifiedQuery)
+		// fmt.Printf("%s\n", modifiedQuery)
 	}
 
 	// Add any extra files specified in the command line
