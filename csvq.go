@@ -9,12 +9,14 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 func main() {
 
 	var query = flag.String("q", "SELECT sqlite_version()", "The query to run over the files.  Omit to retrieve the SQLite library version.")
 	var dbName = flag.String("db", ":memory:", "The name of the database to create.  Omit to create an in-memory database")
+	var delimiter = flag.String("dl", ",", "The field delimiter.  The default is a comma")
 
 	flag.Parse()
 
@@ -63,7 +65,8 @@ func main() {
 	}
 
 	for filePath := range fileSet {
-		createTableFromFile(db, filePath)
+		delimiterRune, _ := utf8.DecodeRuneInString(*delimiter)
+		createTableFromFile(db, filePath, delimiterRune)
 	}
 
 	rows, err := db.Queryx(modifiedQuery)
@@ -83,13 +86,14 @@ func main() {
 	}
 }
 
-func createTableFromFile(db *sqlx.DB, fileName string) {
+func createTableFromFile(db *sqlx.DB, fileName string, delimiter rune) {
 	f, err := os.Open(fileName)
 	checkErr(err)
 
 	defer f.Close()
 
 	csvReader := csv.NewReader(f)
+	csvReader.Comma = delimiter
 
 	lines, err := csvReader.ReadAll()
 	checkErr(err)
