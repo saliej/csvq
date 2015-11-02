@@ -10,15 +10,27 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+	"path/filepath"
 )
+
+type ProgramOptions struct {
+	delimiter rune
+	keepExtension bool
+	hasHeader bool
+}
 
 func main() {
 
 	var query = flag.String("q", "SELECT sqlite_version()", "The query to run over the files.  Omit to retrieve the SQLite library version.")
 	var dbName = flag.String("db", ":memory:", "The name of the database to create.  Omit to create an in-memory database")
-	var delimiter = flag.String("dl", ",", "The field delimiter.  The default is a comma")
+	var dm = flag.String("dl", ",", "The field delimiter.  The default is a comma")
+	var keepExtension = false //flag.Bool("ke", false, "Whether or not the file extension should saved as part of the table name")
 
-	flag.Parse()
+	flag.Parse();
+
+	options := ProgramOptions{}
+	options.delimiter, _ = utf8.DecodeRuneInString(*dm);
+	options.keepExtension = keepExtension;
 
 	db, err := sqlx.Open("sqlite3", *dbName)
 	checkErr(err)
@@ -31,6 +43,8 @@ func main() {
 	matches := tableRegex.FindAllStringSubmatch(*query, -1)
 
 	// This will store the set of files
+	// We store it as a set so that self joins don't result
+	// in the same tables being created twice
 	fileSet := make(map[string]struct{})
 
 	var modifiedQuery = *query
@@ -44,7 +58,7 @@ func main() {
 			os.Exit(-1)
 		}
 
-		modifiedQuery = strings.Replace(modifiedQuery, match[0], "\""+filePath+"\"", -1)
+		modifiedQuery = strings.Replace(modifiedQuery, match[0], "\"" + filePath + "\"", -1)
 		fileSet[filePath] = struct{}{}
 
 		// fmt.Printf("%s\n", modifiedQuery)
@@ -64,9 +78,12 @@ func main() {
 		fileSet[filePath] = struct{}{}
 	}
 
+
 	for filePath := range fileSet {
-		delimiterRune, _ := utf8.DecodeRuneInString(*delimiter)
-		createTableFromFile(db, filePath, delimiterRune)
+		tableName := createTableFromFile(db, filePath, options)
+		
+		// Obvious bugs ahoy...
+		modifiedQuery = strings.Replace(modifiedQuery, filePath, tableName, -1)
 	}
 
 	rows, err := db.Queryx(modifiedQuery)
@@ -86,19 +103,21 @@ func main() {
 	}
 }
 
-func createTableFromFile(db *sqlx.DB, fileName string, delimiter rune) {
+func createTableFromFile(db *sqlx.DB, fileName string, options ProgramOptions) string {
 	f, err := os.Open(fileName)
 	checkErr(err)
 
 	defer f.Close()
 
 	csvReader := csv.NewReader(f)
-	csvReader.Comma = delimiter
+	csvReader.Comma = options.delimiter
 
 	lines, err := csvReader.ReadAll()
 	checkErr(err)
 
 	var createStatement = `CREATE TABLE IF NOT EXISTS "%s" (`
+	var tableName string
+
 	for i, line := range lines {
 
 		if i == 0 {
@@ -113,7 +132,16 @@ func createTableFromFile(db *sqlx.DB, fileName string, delimiter rune) {
 
 			createStatement += ");"
 
-			createStatement = fmt.Sprintf(createStatement, fileName)
+			
+
+			if options.keepExtension {
+				tableName = fileName[0:len(fileName)]
+			} else {
+				var extension = filepath.Ext(fileName)
+				tableName = fileName[0:len(fileName) - len(extension)]
+			}
+
+			createStatement = fmt.Sprintf(createStatement, tableName)
 
 			// fmt.Println(createStatement)
 
@@ -128,7 +156,7 @@ func createTableFromFile(db *sqlx.DB, fileName string, delimiter rune) {
 		}
 
 		var insertStatement = `INSERT INTO "%s" VALUES ("%s")`
-		insertStatement = fmt.Sprintf(insertStatement, fileName, strings.Join(line, `","`))
+		insertStatement = fmt.Sprintf(insertStatement, tableName, strings.Join(line, `","`))
 		//  fmt.Println(insertStatement);
 		stmt, err := db.Prepare(insertStatement)
 		checkErr(err)
@@ -139,6 +167,8 @@ func createTableFromFile(db *sqlx.DB, fileName string, delimiter rune) {
 
 		//break
 	}
+
+	return tableName
 
 }
 
